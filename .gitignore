@@ -1,0 +1,11 @@
+# 내부 작업 메모는 저장소에 올리지 않습니다 (폴더에만 보관)
+README_수정안내.txt
+
+# 압축을 풀면서 생긴 중복 폴더와 압축 파일
+/소율한의원_홈페이지/
+*.zip
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store
