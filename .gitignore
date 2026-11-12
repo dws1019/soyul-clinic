@@ -9,3 +9,12 @@ README_수정안내.txt
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# 예전 버전에서 쓰던 파일 (폴더에 남아 있어도 홈페이지에는 올리지 않습니다)
+assets/css/tokens.css
+assets/fonts/NanumSquare*.woff2
+assets/fonts/Pretendard-*.subset.woff2
+assets/img/doctor-oh.webp
+assets/img/logo-compact.svg
+assets/img/soyul-map.jpg
+assets/img/space-*.jpg

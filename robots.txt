@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /manage.html
+
+Sitemap: https://dws1019.github.io/soyul-clinic/sitemap.xml
