@@ -26,6 +26,20 @@
   function range(a, b) { return t(a) + '<span class="dash" aria-hidden="true">–</span><span class="sr">부터 </span>' + t(b); }
   function mins(hm) { var p = String(hm).split(':'); return (+p[0]) * 60 + (+p[1] || 0); }
   function dayList(arr) { return arr.map(function (d) { return DAYS[d]; }).join('·'); }
+  /* 평일 요일별 시간(byDay로 요일마다 다르게 지정 가능) */
+  function wd(h, d) {
+    var o = (h.weekday.byDay || {})[d] || {};
+    return { open: o.open || h.weekday.open, close: o.close || h.weekday.close, lunch: o.lunch !== undefined ? o.lunch : (h.weekday.lunch || null) };
+  }
+  function wdGroups(h) {
+    var g = [], idx = {};
+    (h.weekday.days || []).slice().sort(function (a, b) { return (a || 7) - (b || 7); }).forEach(function (d) {
+      var x = wd(h, d), k = x.open + '|' + x.close + '|' + (x.lunch ? x.lunch.join('-') : '');
+      if (idx[k] === undefined) { idx[k] = g.length; g.push({ days: [], open: x.open, close: x.close, lunch: x.lunch }); }
+      g[idx[k]].days.push(d);
+    });
+    return g;
+  }
   function clock(hm) { /* '19:30' → '저녁 7시 30분' */
     var m = mins(hm), h = Math.floor(m / 60), mm = m % 60;
     var part = h < 12 ? '오전' : h < 18 ? '오후' : '저녁';
@@ -59,7 +73,7 @@
       return { type: 'weekend', open: h.weekend.open, close: h.weekend.close, lunch: h.weekend.lunch || null,
         name: holiday ? '공휴일' : DAYS[k.dow] + '요일' };
     if ((h.weekday.days || []).indexOf(k.dow) > -1)
-      return { type: 'weekday', open: h.weekday.open, close: h.weekday.close, lunch: h.weekday.lunch || null, name: DAYS[k.dow] + '요일' };
+      return { type: 'weekday', open: wd(h, k.dow).open, close: wd(h, k.dow).close, lunch: wd(h, k.dow).lunch || null, name: DAYS[k.dow] + '요일' };
     return { type: 'closed', why: '휴진' };
   }
   function nextOpen(data, k) {
@@ -97,14 +111,27 @@
 
   /* ---------- 진료시간 ---------- */
   function hoursFacts(data) {
-    var h = data.hours;
+    var h = data.hours, g = wdGroups(h), lastClose = g.reduce(function (m, x) { return mins(x.close) > mins(m) ? x.close : m; }, g[0].close);
+    var lunchG = g.filter(function (x) { return x.lunch; })[0];
     return {
-      weekdayDays: dayList(h.weekday.days), weekday: h.weekday.open + ' – ' + h.weekday.close,
-      lunch: h.weekday.lunch ? h.weekday.lunch[0] + ' – ' + h.weekday.lunch[1] : '',
+      groups: g.map(function (x) { return { days: dayList(x.days), time: x.open + ' – ' + x.close, lunch: x.lunch ? x.lunch[0] + ' – ' + x.lunch[1] : '' }; }),
+      weekdayDays: dayList(h.weekday.days), weekday: g.map(function (x) { return dayList(x.days) + ' ' + x.open + ' – ' + x.close; }).join(', '),
+      lunch: lunchG ? lunchG.lunch[0] + ' – ' + lunchG.lunch[1] : '',
       weekend: h.weekend.open + ' – ' + h.weekend.close,
       closed: (h.closedWeekdays || []).map(function (d) { return DAYS[d] + '요일'; }).join('·'),
-      closeClock: clock(h.weekday.close), weekendClose: clock(h.weekend.close), weekendOpen: clock(h.weekend.open)
+      closeClock: clock(lastClose), lateDays: dayList(g.filter(function (x) { return x.close === lastClose; }).reduce(function (a, x) { return a.concat(x.days); }, [])), weekendClose: clock(h.weekend.close), weekendOpen: clock(h.weekend.open)
     };
+  }
+  /* 화면 곳곳의 진료시간 조각 (빌드·브라우저 공통) */
+  function hoursLine(data) { var f = hoursFacts(data); return f.groups.map(function (g) { return '<span>' + esc(g.days) + ' ' + g.time + '</span>'; }).join('') + '<span>토·일·공휴일 ' + f.weekend + '</span>' + (f.closed ? '<span>' + esc(f.closed) + ' 휴진</span>' : ''); }
+  function hoursMenu(data) { var f = hoursFacts(data); return f.groups.map(function (g) { return esc(g.days) + ' ' + g.time; }).join('<br>') + '<br>토·일·공휴일 ' + f.weekend + (f.closed ? '<br>' + esc(f.closed) + ' 휴진' : ''); }
+  function hoursMain(data) { var f = hoursFacts(data); return f.groups.map(function (g) { return esc(g.days) + ' ' + g.time; }).join('<br>'); }
+  function hoursSub(data) { var f = hoursFacts(data); return '토·일·공휴일 <span class="nowrap">' + f.weekend + '</span>' + (f.lunch ? '<br>평일 점심 <span class="nowrap">' + f.lunch + '</span>' : '') + (f.closed ? '<br>' + esc(f.closed) + ' 휴진' : ''); }
+  function hoursFoot(data) {
+    var f = hoursFacts(data);
+    return '<dl class="foot-hours">' + f.groups.map(function (g) { return '<div><dt>' + esc(g.days) + '</dt><dd>' + g.time + '</dd></div>'; }).join('') +
+      (f.lunch ? '<div><dt>평일 점심</dt><dd>' + f.lunch + '</dd></div>' : '') +
+      '<div><dt>토·일·공휴일</dt><dd>' + f.weekend + '</dd></div>' + (f.closed ? '<div><dt>' + esc(f.closed) + '</dt><dd>휴진</dd></div>' : '') + '</dl>';
   }
   /* 공휴일 진료 안내 한 줄 */
   function holidayNote(data) {
@@ -115,8 +142,10 @@
   }
   function hoursTable(data) {
     var h = data.hours, f = hoursFacts(data);
-    var rows = '<tr><th scope="row">평일 <small>' + esc(f.weekdayDays) + '</small></th><td><b>' + range(h.weekday.open, h.weekday.close) + '</b>' +
-      (h.weekday.lunch ? '<small>점심시간 ' + range(h.weekday.lunch[0], h.weekday.lunch[1]) + '</small>' : '') + '</td></tr>';
+    var rows = wdGroups(h).map(function (x) {
+      return '<tr><th scope="row">' + esc(dayList(x.days)) + '</th><td><b>' + range(x.open, x.close) + '</b>' +
+        (x.lunch ? '<small>점심시간 ' + range(x.lunch[0], x.lunch[1]) + '</small>' : '') + '</td></tr>';
+    }).join('');
     rows += '<tr><th scope="row">토·일·공휴일</th><td><b>' + range(h.weekend.open, h.weekend.close) + '</b><small>점심시간 없이 진료</small></td></tr>';
     if (f.closed) rows += '<tr class="is-off"><th scope="row">' + esc(f.closed) + '</th><td><b>휴진</b></td></tr>';
     return '<table class="hours"><caption class="sr">진료시간</caption><tbody>' + rows + '</tbody></table>';
@@ -124,15 +153,15 @@
   /* 요일별 막대 — 한 주의 리듬을 한눈에 */
   function weekChart(data, todayDow) {
     var h = data.hours, lo = 9 * 60, hi = 20 * 60;
-    [h.weekday.open, h.weekend.open].forEach(function (x) { lo = Math.min(lo, Math.floor(mins(x) / 60) * 60); });
-    [h.weekday.close, h.weekend.close].forEach(function (x) { hi = Math.max(hi, Math.ceil(mins(x) / 60) * 60); });
+    wdGroups(h).map(function (x) { return x.open; }).concat([h.weekend.open]).forEach(function (x) { lo = Math.min(lo, Math.floor(mins(x) / 60) * 60); });
+    wdGroups(h).map(function (x) { return x.close; }).concat([h.weekend.close]).forEach(function (x) { hi = Math.max(hi, Math.ceil(mins(x) / 60) * 60); });
     var span = hi - lo;
     function pct(m) { return ((m - lo) / span * 100).toFixed(2) + '%'; }
     function bar(a, b, cls) { return '<span class="week__bar' + (cls ? ' ' + cls : '') + '" style="left:' + pct(mins(a)) + ';width:' + ((mins(b) - mins(a)) / span * 100).toFixed(2) + '%"></span>'; }
     var order = [1, 2, 3, 4, 5, 6, 0], out = '';
     order.forEach(function (d) {
       var closed = (h.closedWeekdays || []).indexOf(d) > -1, wk = d === 0 || d === 6;
-      var p = closed ? null : wk ? h.weekend : ((h.weekday.days || []).indexOf(d) > -1 ? h.weekday : null);
+      var p = closed ? null : wk ? h.weekend : ((h.weekday.days || []).indexOf(d) > -1 ? wd(h, d) : null);
       var text = p ? p.open + ' – ' + p.close + (p.lunch ? ', 점심시간 ' + p.lunch[0] + ' – ' + p.lunch[1] : '') : '휴진';
       out += '<li class="week__row' + (p ? '' : ' is-off') + (d === todayDow ? ' is-today' : '') + '">' +
         '<span class="week__day">' + DAYS[d] + (d === todayDow ? '<span class="sr"> (오늘)</span>' : '') + '</span>' +
@@ -143,7 +172,7 @@
     var ticks = '';
     for (var m = lo; m <= hi; m += 120) ticks += '<span style="left:' + pct(m) + '">' + (m / 60) + '시</span>';
     return '<div class="week"><ol class="week__rows">' + out + '</ol><div class="week__axis" aria-hidden="true"><span class="week__day"></span><span class="week__ticks">' + ticks + '</span><span class="week__time"></span></div>' +
-      (h.weekday.lunch ? '<p class="week__legend"><span class="week__swatch"></span>진료 <span class="week__swatch is-lunch"></span>점심시간</p>' : '') + '</div>';
+      (wdGroups(h).some(function (x) { return x.lunch; }) ? '<p class="week__legend"><span class="week__swatch"></span>진료 <span class="week__swatch is-lunch"></span>점심시간</p>' : '') + '</div>';
   }
 
   /* ---------- 자주 묻는 질문 ---------- */
@@ -242,7 +271,7 @@
   function jsonLd(data, siteUrl) {
     var c = data.clinic, p = data.place, h = data.hours, ch = data.channels || {};
     var en = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    var spec = [{ '@type': 'OpeningHoursSpecification', dayOfWeek: h.weekday.days.map(function (d) { return en[d]; }), opens: h.weekday.open, closes: h.weekday.close }];
+    var spec = wdGroups(h).map(function (x) { return { '@type': 'OpeningHoursSpecification', dayOfWeek: x.days.map(function (d) { return en[d]; }), opens: x.open, closes: x.close }; });
     var wk = [6, 0].filter(function (d) { return (h.closedWeekdays || []).indexOf(d) < 0; });
     if (wk.length) spec.push({ '@type': 'OpeningHoursSpecification', dayOfWeek: wk.map(function (d) { return en[d]; }).concat(['PublicHolidays']), opens: h.weekend.open, closes: h.weekend.close });
     var o = {
@@ -266,7 +295,7 @@
 
   root.SoyulRender = {
     DAYS: DAYS, esc: esc, rich: rich, icon: icon, mins: mins, clock: clock, kst: kst, plan: plan, status: status, isOpened: isOpened,
-    hoursFacts: hoursFacts, holidayNote: holidayNote, hoursTable: hoursTable, weekChart: weekChart, faqList: faqList, faqCats: faqCats, feeTable: feeTable,
+    hoursFacts: hoursFacts, hoursLine: hoursLine, hoursMenu: hoursMenu, hoursMain: hoursMain, hoursSub: hoursSub, hoursFoot: hoursFoot, holidayNote: holidayNote, hoursTable: hoursTable, weekChart: weekChart, faqList: faqList, faqCats: faqCats, feeTable: feeTable,
     postList: postList, postCats: postCats, photoGrid: photoGrid, hasSample: hasSample, equipmentList: equipmentList, links: links, jsonLd: jsonLd, faqLd: faqLd
   };
 })(typeof window !== 'undefined' ? window : globalThis);

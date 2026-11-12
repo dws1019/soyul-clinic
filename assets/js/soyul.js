@@ -82,15 +82,11 @@
   function each(name, fn) { $$('[data-soyul="' + name + '"]').forEach(fn); }
   each('hours-table', function (el) { el.innerHTML = R.hoursTable(D); });
   each('week', function (el) { el.innerHTML = R.weekChart(D, R.isOpened(D, R.kst()) ? today : -1); });
-  each('hours-line', function (el) { el.innerHTML = '<span>평일 ' + F.weekday + '</span><span>토·일·공휴일 ' + F.weekend + '</span>' + (F.closed ? '<span>' + F.closed + ' 휴진</span>' : ''); });
-  each('hours-menu', function (el) { el.innerHTML = '평일(' + F.weekdayDays + ') ' + F.weekday + '<br>토·일·공휴일 ' + F.weekend + (F.closed ? '<br>' + F.closed + ' 휴진' : ''); });
-  each('hours-main', function (el) { el.textContent = '평일 ' + F.weekday; });
-  each('hours-sub', function (el) { el.innerHTML = '토·일·공휴일 <span class="nowrap">' + F.weekend + '</span>' + (F.lunch ? '<br>평일 점심 <span class="nowrap">' + F.lunch + '</span>' : '') + (F.closed ? '<br>' + F.closed + ' 휴진' : ''); });
-  each('hours-foot', function (el) {
-    el.innerHTML = '<dl class="foot-hours"><div><dt>평일 <small>' + F.weekdayDays + '</small></dt><dd>' + F.weekday + '</dd></div>' +
-      (F.lunch ? '<div><dt>평일 점심</dt><dd>' + F.lunch + '</dd></div>' : '') +
-      '<div><dt>토·일·공휴일</dt><dd>' + F.weekend + '</dd></div>' + (F.closed ? '<div><dt>' + F.closed + '</dt><dd>휴진</dd></div>' : '') + '</dl>';
-  });
+  each('hours-line', function (el) { el.innerHTML = R.hoursLine(D); });
+  each('hours-menu', function (el) { el.innerHTML = R.hoursMenu(D); });
+  each('hours-main', function (el) { el.innerHTML = R.hoursMain(D); });
+  each('hours-sub', function (el) { el.innerHTML = R.hoursSub(D); });
+  each('hours-foot', function (el) { el.innerHTML = R.hoursFoot(D); });
   each('holiday-note', function (el) { el.textContent = R.holidayNote(D); });
   each('hours-note', function (el) { el.textContent = D.hours.note || ''; el.hidden = !D.hours.note; });
   each('faq', function (el) {
